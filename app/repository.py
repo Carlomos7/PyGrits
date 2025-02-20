@@ -60,3 +60,33 @@ class Repository:
         hash_value = hasher.hexdigest()
 
         return hash_value
+
+    def add(self, file_path: str) -> None:
+        if not self._initialized:
+            raise ValueError("Repository not initialized")
+
+        # Convert the provided path to a Path object for better manipulation
+        file_path = Path(file_path).resolve()
+
+        # Validation checks
+        if not file_path.exists():
+            raise FileNotFoundError(f"File {file_path} not found")
+
+        if not str(file_path).startswith(str(self.path)):
+            raise ValueError("File is outside repository")
+
+        # Read the file and hash contents
+        file_contents = file_path.read_text(encoding="utf-8")
+        file_hash = self.hash_object(file_contents)
+
+        print(f"Hash: {file_hash}")
+
+        # Write the file contents to the objects directory
+        object_path = self.objects_dir / file_hash
+        object_path.write_text(file_contents, encoding="utf-8")
+
+if __name__ == "__main__":
+    # Simmple command line interface to init and add a file to the repository
+    repo = Repository()
+    repo.init()
+    repo.add("sample.txt")
