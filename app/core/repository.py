@@ -3,7 +3,7 @@ repository.py: Main repository management class for PyGrits.
 """
 
 from pathlib import Path
-from typing import List, Iterable
+from typing import List, Optional
 import difflib
 from colorama import Fore, Style
 
@@ -250,88 +250,150 @@ class Repository:
                 else:
                     print(line)
 
-    def restore(self, commit_hash: str = None, paths: List[str] = None) -> None:
-        """Restore files from a specific commit.
+    def restore(self, paths: List[str], source: Optional[str] = None, staged: bool = False) -> None:
+        """Restore files to their state in a previous commit or staging area.
 
         Args:
-            commit_hash (str, optional): Commit hash to restore from. Defaults to HEAD.
-            paths (List[str], optional): Specific paths to restore. Defaults to all files.
+            paths: List of file paths to restore
+            source: Source commit to restore from (defaults to HEAD)
+            staged: Whether to restore from staging area
 
         Raises:
-            ValueError: If commit not found or paths are invalid
+            ValueError: If paths or source commit are invalid
         """
         if not self._initialized:
             logger.error("Repository not initialized")
             raise ValueError("Repository not initialized")
 
-        # Use HEAD if no commit specified
-        if commit_hash is None:
-            commit_hash = self.get_head()
-            if not commit_hash:
-                logger.error("No commits to restore from")
-                raise ValueError("No commits to restore from")
-
         try:
-            # Get commit data
-            commit_data = self.object_store.get_commit(commit_hash)
-            if not commit_data:
-                logger.error(f"Commit {commit_hash} not found")
-                raise ValueError(f"Commit {commit_hash} not found")
-
-            files_to_restore = commit_data.get("files", {})
-
-            # If specific paths are provided, filter files to restore
-            if paths:
-                filtered_files = {}
-                for path in paths:
-                    resolved_path = str(Path(path).resolve().relative_to(self.path))
-                    if resolved_path in files_to_restore:
-                        filtered_files[resolved_path] = files_to_restore[resolved_path]
-                    else:
-                        logger.warning(f"File {path} not found in commit {commit_hash}")
-                files_to_restore = filtered_files
-
-            if not files_to_restore:
-                logger.warning("No files to restore")
-                return
-
-            # Create backup of current state (optional)
-            self._backup_working_directory(files_to_restore.keys())
-
-            # Restore files
-            restore_commit = {"files": files_to_restore}
-            self.object_store.restore_files(restore_commit, self.path)
-
-            logger.info(
-                f"Restored {len(files_to_restore)} files from commit {commit_hash[:8]}"
-            )
-
+            if staged:
+                self._restore_from_staging(paths)
+            else:
+                self._restore_from_commit(paths, source)
         except Exception as e:
             logger.error(f"Failed to restore: {str(e)}")
             raise
 
-    def _backup_working_directory(self, paths: Iterable[str]) -> None:
-        """Create backup of files that will be overwritten.
+    def _restore_from_staging(self, paths: List[str]) -> None:
+        """Restore files from staging area."""
+        staged_files = self.index.get_staged_files()
+        restored = 0
 
-        Args:
-            paths (Iterable[str]): Paths to backup
-        """
-        backup_dir = self.vcs_dir / "backup"
+        for path in paths:
+            rel_path = str(Path(path).resolve().relative_to(self.path))
+            if rel_path not in staged_files:
+                logger.warning(f"File {path} not in staging area")
+                continue
+
+            file_info = staged_files[rel_path]
+            content = self.object_store.get_object(file_info["hash"])
+            if content is None:
+                logger.error(f"Could not find content for {path}")
+                continue
+
+            # Backup existing file
+            file_path = self.path / rel_path
+            if file_path.exists():
+                self._backup_file(file_path)
+
+            # Restore file
+            file_path.write_text(content, encoding='utf-8')
+            restored += 1
+            logger.info(f"Restored {path} from staging area")
+
+        logger.info(f"Restored {restored} file(s) from staging area")
+
+    def _restore_from_commit(self, paths: List[str], source: Optional[str] = None) -> None:
+        """Restore files from a commit."""
+        # Use HEAD if no source specified
+        if source is None:
+            source = self.get_head()
+            if not source:
+                logger.error("No commits to restore from")
+                raise ValueError("No commits to restore from")
+
+        # Get commit data
+        commit_data = self.object_store.get_commit(source)
+        if not commit_data:
+            logger.error(f"Commit {source} not found")
+            raise ValueError(f"Commit {source} not found")
+
+        restored = 0
+        for path in paths:
+            rel_path = str(Path(path).resolve().relative_to(self.path))
+            if rel_path not in commit_data["files"]:
+                logger.warning(f"File {path} not found in commit {source}")
+                continue
+
+            file_info = commit_data["files"][rel_path]
+            content = self.object_store.get_object(file_info["hash"])
+            if content is None:
+                logger.error(f"Could not find content for {path}")
+                continue
+
+            # Backup existing file
+            file_path = self.path / rel_path
+            if file_path.exists():
+                self._backup_file(file_path)
+
+            # Restore file
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(content, encoding='utf-8')
+            restored += 1
+            logger.info(f"Restored {path} from commit {source[:8]}")
+
+        logger.info(f"Restored {restored} file(s) from commit {source[:8]}")
+
+    def restore_hard(self) -> None:
+        """Discard all local changes and restore to HEAD."""
+        if not self._initialized:
+            logger.error("Repository not initialized")
+            raise ValueError("Repository not initialized")
+
+        head = self.get_head()
+        if not head:
+            logger.error("No commits to restore from")
+            raise ValueError("No commits to restore from")
+
         try:
-            for path in paths:
-                file_path = self.path / path
-                if file_path.exists():
-                    relative_backup_path = backup_dir / path
-                    ensure_dir(relative_backup_path.parent)
-                    shutil.copy2(file_path, relative_backup_path)
-                    logger.debug(f"Created backup of {path}")
+            # Backup current working directory
+            backup_dir = self.vcs_dir / "backup" / "working_tree"
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir)
+            shutil.copytree(self.path, backup_dir, ignore=lambda d, f: ['.pygrits'])
+
+            # Get HEAD commit
+            commit_data = self.object_store.get_commit(head)
+            if not commit_data:
+                raise ValueError(f"Could not read HEAD commit {head}")
+
+            # Remove all tracked files
+            self._clean_working_directory(commit_data["files"].keys())
+
+            # Restore files from HEAD
+            self._restore_from_commit(list(commit_data["files"].keys()), head)
+
+            # Clear staging area
+            self.index.clear()
+
+            logger.info("Hard reset to HEAD complete")
+
         except Exception as e:
-            logger.error(f"Failed to create backup: {str(e)})")
+            logger.error(f"Failed to perform hard restore: {str(e)}")
             raise
 
-    def clean_backups(self) -> None:
-        """Remove backup directory."""
-        backup_dir = self.vcs_dir / "backup"
-        if backup_dir.exists():
-            shutil.rmtree(backup_dir)
-            logger.debug("Removed backup directory")
+    def _backup_file(self, file_path: Path) -> None:
+        """Create backup of a file."""
+        backup_dir = self.vcs_dir / "backup" / "files"
+        backup_path = backup_dir / file_path.relative_to(self.path)
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(file_path, backup_path)
+        logger.debug(f"Created backup of {file_path}")
+
+    def _clean_working_directory(self, tracked_files: List[str]) -> None:
+        """Remove tracked files from working directory."""
+        for file_path in tracked_files:
+            full_path = self.path / file_path
+            if full_path.exists():
+                full_path.unlink()
+                logger.debug(f"Removed {file_path}")
