@@ -168,7 +168,18 @@ class Repository:
         """
         self.head_file.write_text(commit_hash)
 
+    def get_staged_files(self) -> Dict[str, Any]:
+        """Get the list of staged files.
 
+        Returns:
+            Dict[str, Any]: Dictionary of staged files
+        """
+        try:
+            with open(self.index_file, "r") as f:
+                index = json.load(f)
+                return index["entries"]
+        except (json.JSONDecodeError, FileNotFoundError):
+            return {}
 
 
 if __name__ == "__main__":
