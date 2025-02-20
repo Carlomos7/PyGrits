@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import hashlib
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
 from utils.logger import logger
 
@@ -306,6 +306,34 @@ class Repository:
             except ValueError:
                 logger.error(f"Invalid commit {current_commit}")
                 break
+
+    def get_file_content(self, commit_hash: str, file_path: str) -> Optional[str]:
+        try:
+            commit_data = self.get_commit(commit_hash)
+            files = commit_data.get("files", {})
+
+            # Get relative path for lookup
+            rel_path = str(Path(file_path).resolve().relative_to(self.path))
+
+            if rel_path not in files:
+                logger.debug(f"File {rel_path} not found in commit {commit_hash}")
+                return None
+
+            files_hash = files[rel_path]["hash"]
+            object_path = self.objects_dir / files_hash
+
+            if not object_path.exists():
+                logger.error(f"Object {files_hash} not found")
+                return None
+
+            return object_path.read_text(encoding="utf-8")
+
+        except Exception as e:
+            logger.error(f"Failed to get file content: {str(e)}")
+            return None
+
+    def show_commit_diff(self, commit_hash: str):
+        pass
 
 
 if __name__ == "__main__":
