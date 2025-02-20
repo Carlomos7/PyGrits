@@ -5,10 +5,10 @@ objects.py: Core object storage and retrieval functionality.
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Set
 
 from ..utils.hash_utils import hash_object
-from ..utils.file_utils import write_text_file, read_text_file
+from ..utils.file_utils import write_text_file, read_text_file, ensure_dir
 from ..utils.logger import logger
 
 
@@ -84,3 +84,45 @@ class ObjectStore:
             except json.JSONDecodeError:
                 logger.error(f"Invalid commit format: {commit_hash}")
         return None
+
+    def restore_files(self, commit_data: Dict[str, Any], repo_path: Path) -> None:
+        """Restore files from a commit to the working directory.
+
+        Args:
+            commit_data (Dict[str, Any]): Commit data containing files to restore
+            repo_path (Path): Repository root path
+        """
+        try:
+            files = commit_data.get("files", {})
+            for file_path, file_info in files.items():
+                full_path = repo_path / file_path
+                content = self.get_object(file_info["hash"])
+
+                if content is None:
+                    logger.error(f"Could not find content for {file_path}")
+                    continue
+
+                # Create directory if it doesn't exist
+                ensure_dir(full_path.parent)
+
+                # Write file content
+                write_text_file(full_path, content)
+                logger.debug(f"Restored {file_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to restore files: {str(e)}")
+            raise
+
+    def get_files_at_commit(self, commit_hash: str) -> Set[str]:
+        """Get set of files present in a commit.
+
+        Args:
+            commit_hash (str): Commit hash to check
+
+        Returns:
+            Set[str]: Set of file paths in the commit
+        """
+        commit_data = self.get_commit(commit_hash)
+        if commit_data:
+            return set(commit_data.get("files", {}).keys())
+        return set()
