@@ -7,11 +7,11 @@ from typing import Dict, Any, Optional
 import difflib
 from colorama import Fore, Style
 
-from utils.logger import logger
-from utils.file_utils import ensure_dir, get_relative_path
-from utils.hash_utils import hash_file
-from objects import ObjectStore
-from index import Index
+from ..utils.logger import logger
+from ..utils.file_utils import ensure_dir, get_relative_path
+from ..utils.hash_utils import hash_file
+from .objects import ObjectStore
+from .index import Index
 
 class Repository:
     def __init__(self, path: str = "."):
@@ -247,12 +247,3 @@ class Repository:
                     print(f"{Fore.CYAN}{line}{Style.RESET_ALL}")
                 else:
                     print(line)
-
-if __name__ == "__main__":
-    repo = Repository()
-
-    repo.add("app/repository.py")
-    repo.add("app/index.py")
-    commit_hash = repo.create_commit("Initial commit")
-    repo.log()
-    repo.show_commit_diff(commit_hash)

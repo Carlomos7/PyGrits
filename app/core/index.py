@@ -7,8 +7,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-from utils.logger import logger
-from utils.file_utils import get_relative_path, read_text_file, write_text_file
+from ..utils.logger import logger
+from ..utils.file_utils import get_relative_path, read_text_file, write_text_file
 
 
 class Index:
