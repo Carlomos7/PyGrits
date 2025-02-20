@@ -9,6 +9,11 @@ from datetime import datetime
 class Repository:
 
     def __init__(self, path: str = "."):
+        """Initialize a new repository object.
+
+        Args:
+            path (str, optional): Path to the repository. Defaults to ".".
+        """
 
         self.path = Path(
             path
@@ -28,6 +33,11 @@ class Repository:
         self._initialized = self._check_initialized()
 
     def _check_initialized(self) -> bool:
+        """Check if the repository is initialized.
+
+        Returns:
+            bool: True if the repository is initialized, False otherwise.
+        """
         return (
             self.vcs_dir.exists()
             and self.objects_dir.exists()
@@ -35,6 +45,10 @@ class Repository:
         )
 
     def init(self):
+        """Initialize a new repository.
+        Creates the version control directory structure and initial files.
+        """
+
         if self._initialized:
             raise Exception("Repository already initialized")
 
@@ -55,14 +69,28 @@ class Repository:
         print(f"Initialized empty repository in {self.path}")
 
     def hash_object(self, data: bytes) -> str:
+        """Hash the provided data using SHA1.
+
+        Args:
+            data (bytes): Data to be hashed
+        """
+
         hasher = hashlib.sha1()
         hasher.update(data.encode("utf-8"))
         hash_value = hasher.hexdigest()
 
         return hash_value
+
     def _update_index(self, file_path: Path, hash_value: str) -> None:
+        """Update the index file with the new file entry.
+
+        Args:
+            file_path (Path): Path to the file to be added
+            hash_value (str): Hash value of the file contents
+        """
         # Read the contents of the index file and do a json parse on it
         # Then add the new file to the index and write it back to the index file
+
         # Get relative path from repository root for storage
         rel_path = str(file_path.relative_to(self.path))
 
@@ -85,6 +113,12 @@ class Repository:
             json.dump(index, f, indent=2)
 
     def add(self, file_path: str) -> None:
+        """Add a file to the repository.
+
+        Args:
+            file_path (str): Path to the file to be added
+        """
+
         if not self._initialized:
             raise ValueError("Repository not initialized")
 
