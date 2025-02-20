@@ -33,3 +33,23 @@ class Repository:
             and self.objects_dir.exists()
             and self.head_file.exists()
         )
+
+    def init(self):
+        if self._initialized:
+            raise Exception("Repository already initialized")
+
+        # Create directory structure
+        self.objects_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            self.head_file.touch(exist_ok=False)
+            # Initialize empty index file with JSON structure
+            with open(self.index_file, "w") as f:
+                json.dump({"version": 1, "entries": {}}, f, indent=2)
+        except FileExistsError:
+            raise Exception("Repository already initialized")
+
+        # Mark repository as initialized
+        self._initialized = True
+
+        print(f"Initialized empty repository in {self.path}")
