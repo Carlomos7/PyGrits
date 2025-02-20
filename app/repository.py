@@ -4,6 +4,7 @@ import hashlib
 import json
 from typing import Dict, Any
 from datetime import datetime
+from utils.logger import logger
 
 
 class Repository:
@@ -32,6 +33,11 @@ class Repository:
         # Internal state tracking
         self._initialized = self._check_initialized()
 
+        # Set up logging
+        self.log_file = self.vcs_dir / "pygrits.log"
+        if self._initialized and not self.log_file.parent.exists():
+            self.log_file.parent.mkdir(parents=True)
+
     def _check_initialized(self) -> bool:
         """Check if the repository is initialized.
 
@@ -44,29 +50,31 @@ class Repository:
             and self.head_file.exists()
         )
 
-    def init(self):
+    def init(self) -> None:
         """Initialize a new repository.
         Creates the version control directory structure and initial files.
         """
 
         if self._initialized:
+            logger.error("Repository already initialized")
             raise Exception("Repository already initialized")
-
-        # Create directory structure
-        self.objects_dir.mkdir(parents=True, exist_ok=True)
-
         try:
+            # Create directory structure
+            self.objects_dir.mkdir(parents=True, exist_ok=True)
             self.head_file.touch(exist_ok=False)
+
             # Initialize empty index file with JSON structure
             with open(self.index_file, "w") as f:
                 json.dump({"version": 1, "entries": {}}, f, indent=2)
-        except FileExistsError:
-            raise Exception("Repository already initialized")
 
-        # Mark repository as initialized
-        self._initialized = True
+            # Mark repository as initialized
+            self._initialized = True
 
-        print(f"Initialized empty repository in {self.path}")
+        except Exception as e:
+            logger.error(f"Failed to initialize repository: {str(e)}")
+            raise
+
+        logger.info(f"Initialized repository at {self.path}")
 
     def hash_object(self, data: bytes) -> str:
         """Hash the provided data using SHA1.
@@ -120,30 +128,38 @@ class Repository:
         """
 
         if not self._initialized:
+            logger.error("Repository not initialized")
             raise ValueError("Repository not initialized")
 
         # Convert the provided path to a Path object for better manipulation
-        file_path = Path(file_path).resolve()
+        try:
+            file_path = Path(file_path).resolve()
 
-        # Validation checks
-        if not file_path.exists():
-            raise FileNotFoundError(f"File {file_path} not found")
+            # Validation checks
+            if not file_path.exists():
+                logger.error(f"File not found: {file_path}")
+                raise FileNotFoundError(f"File not found: {file_path}")
 
-        if not str(file_path).startswith(str(self.path)):
-            raise ValueError("File is outside repository")
+            if not str(file_path).startswith(str(self.path)):
+                logger.error("File is outside repository")
+                raise ValueError("File is outside repository")
 
-        # Read the file and hash contents
-        file_contents = file_path.read_text(encoding="utf-8")
-        file_hash = self.hash_object(file_contents)
+            # Read the file and hash contents
+            file_contents = file_path.read_text(encoding="utf-8")
+            file_hash = self.hash_object(file_contents)
 
-        print(f"Hash: {file_hash}")
+            print(f"Hash: {file_hash}")
 
-        # Write the file contents to the objects directory
-        object_path = self.objects_dir / file_hash
-        object_path.write_text(file_contents, encoding="utf-8")
+            # Write the file contents to the objects directory
+            object_path = self.objects_dir / file_hash
+            object_path.write_text(file_contents, encoding="utf-8")
 
-        self._update_index(file_path, file_hash)
-        print(f"File to be added: {file_path}")
+            self._update_index(file_path, file_hash)
+            logger.info(f"Added file: {file_path.relative_to(self.path)}")
+            logger.debug(f"File hash: {file_hash}")
+        except Exception as e:
+            logger.error(f"Failed to add file: {str(e)}")
+            raise
 
     def get_head(self) -> str:
         """Get the current HEAD commit hash.
@@ -152,11 +168,13 @@ class Repository:
             str: HEAD commit hash
         """
         if not self._initialized:
+            logger.error("Repository not initialized")
             raise ValueError("Repository not initialized")
 
         try:
             return self.head_file.read_text().strip()
         except FileNotFoundError:
+            logger.error("HEAD file not found")
             return ""
 
     def set_head(self, commit_hash: str) -> None:
@@ -195,14 +213,17 @@ class Repository:
                     or commit message is invalid
         """
         if not self._initialized:
+            logger.error("Repository not initialized")
             raise ValueError("Repository not initialized")
 
         if not message or not message.strip():
+            logger.error("Commit message cannot be empty")
             raise ValueError("Commit message cannot be empty")
 
         # Get staged files
         staged_files = self.get_staged_files()
         if not staged_files:
+            logger.warning("No files staged for commit")
             raise ValueError("No files staged for commit")
 
         # Create commit object with additional metadata
@@ -230,8 +251,8 @@ class Repository:
             with open(self.index_file, "w") as f:
                 json.dump({"version": 1, "entries": {}}, f, indent=2)
 
-            print(f"Created commit {commit_hash[:8]}")  # Show shortened hash
-            print(f"Message: {message}")
+            logger.info(f"Created commit: {commit_hash[:8]}")
+            logger.debug(f"Full commit hash: {commit_hash}")
             return commit_hash
 
         except Exception as e:
@@ -263,21 +284,27 @@ class Repository:
             max_entries (int, optional): Maximum number of entries to display. Defaults to None.
         """
         current_commit = self.get_head()
+        if not current_commit:
+            logger.info("No commits yet")
+            return
         count = 0
 
         while current_commit and (max_entries is None or count < max_entries):
             try:
                 commit_data = self.get_commit(current_commit)
-                print(f"Commit: {current_commit}")
-                print(f"Date: {commit_data['timestamp']}")
-                print(f"Message: {commit_data['message']}")
-                print("-" * 50)
+
+                logger.info(
+                    f"Commit: {current_commit}\n"
+                    f"Date: {commit_data['timestamp']}\n"
+                    f"Message: {commit_data['message']}\n"
+                    f"{'-' * 50}"
+                )
 
                 current_commit = commit_data.get("parent", "")
                 count += 1
 
             except ValueError:
-                print(f"Invalid commit {current_commit}")
+                logger.error(f"Invalid commit {current_commit}")
                 break
 
 
@@ -286,5 +313,5 @@ if __name__ == "__main__":
     repo = Repository()
     # repo.init()
     repo.add("sample.txt")
-    repo.create_commit("Third commit")
+    repo.create_commit("5th commit")
     repo.log()
