@@ -5,6 +5,8 @@ import json
 from typing import Dict, Any, Optional
 from datetime import datetime
 from utils.logger import logger
+import difflib
+from colorama import Fore, Style, init
 
 
 class Repository:
@@ -232,7 +234,6 @@ class Repository:
             "timestamp": datetime.now().isoformat(),
             "message": message.strip(),
             "files": staged_files,
-            "author": os.environ.get("USER", "unknown"),  # Add author information
         }
 
         try:
@@ -332,14 +333,75 @@ class Repository:
             logger.error(f"Failed to get file content: {str(e)}")
             return None
 
-    def show_commit_diff(self, commit_hash: str):
-        pass
+    def show_commit_diff(self, commit_hash: str) -> None:
+        """Show changes introduced by a commit.
+
+        Args:
+            commit_hash (str): Hash of the commit to show
+        """
+        try:
+            commit_data = self.get_commit(commit_hash)
+            parent_hash = commit_data.get("parent", "")
+
+            # Display commit header information
+            logger.info(
+                f"{Fore.YELLOW} Commit: {commit_hash}{Style.RESET_ALL}\n"
+                f"{Fore.CYAN}Date: {Style.RESET_ALL}{commit_data['timestamp']}\n"
+                f"\n{Fore.CYAN}Message: {Style.RESET_ALL}{commit_data['message']}\n"
+            )
+
+            # Get files changed in this commit
+            changed_files = commit_data.get("files", {})
+
+            for file_path in changed_files:
+                # Get current and parent versions of the file
+                current_content = self.get_file_content(commit_hash, file_path)
+                parent_content = (
+                    self.get_file_content(parent_hash, file_path) if parent_hash else ""
+                )
+
+                if not parent_content:  # New file
+                    logger.info(
+                        f"\n{Fore.CYAN}New file: {file_path}{Style.RESET_ALL}\n"
+                        + "\n".join(f"{Fore.GREEN}+ {line}{Style.RESET_ALL}" for line in current_content.splitlines())
+                    )
+                    continue
+
+                # Generate diff
+                diff = list(
+                    difflib.unified_diff(
+                        parent_content.splitlines(keepends=True),
+                        current_content.splitlines(keepends=True),
+                        fromfile=f"a/{file_path}",
+                        tofile=f"b/{file_path}",
+                        lineterm="",
+                    )
+                )
+
+                if diff:
+                    logger.info(
+                        f"Viewing changes for commit: {commit_hash}\n"
+                        f"\n{Fore.CYAN}Modified: {file_path}{Style.RESET_ALL}\n"
+                        + "\n".join(
+                            f"{Fore.GREEN}{line}{Style.RESET_ALL}" if line.startswith("+") else
+                            f"{Fore.RED}{line}{Style.RESET_ALL}" if line.startswith("-") else
+                            f"{Fore.CYAN}{line}{Style.RESET_ALL}" if line.startswith("@") else
+                            line
+                            for line in diff
+                        )
+                    )
+
+        except Exception as e:
+            logger.error(f"{Fore.RED}Error showing diff: {str(e)}{Style.RESET_ALL}")
+            raise
+
 
 
 if __name__ == "__main__":
     # Simmple command line interface to init and add a file to the repository
     repo = Repository()
     # repo.init()
-    repo.add("sample.txt")
-    repo.create_commit("5th commit")
+    #repo.add("sample.txt")
+    #repo.create_commit("5th commit")
     repo.log()
+    repo.show_commit_diff("9ce7a9a2e5c818d21c1be304b378563398f43899")
