@@ -7,6 +7,7 @@ setup(
     install_requires=[
         "click",
         "colorama",
+        "pathlib",
     ],
     entry_points={
         "console_scripts": [
