@@ -394,14 +394,3 @@ class Repository:
         except Exception as e:
             logger.error(f"{Fore.RED}Error showing diff: {str(e)}{Style.RESET_ALL}")
             raise
-
-
-
-if __name__ == "__main__":
-    # Simmple command line interface to init and add a file to the repository
-    repo = Repository()
-    # repo.init()
-    #repo.add("sample.txt")
-    #repo.create_commit("5th commit")
-    repo.log()
-    repo.show_commit_diff("9ce7a9a2e5c818d21c1be304b378563398f43899")
