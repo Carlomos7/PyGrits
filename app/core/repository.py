@@ -3,7 +3,7 @@ repository.py: Main repository management class for PyGrits.
 """
 
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import List, Iterable
 import difflib
 from colorama import Fore, Style
 
@@ -12,6 +12,8 @@ from ..utils.file_utils import ensure_dir, get_relative_path
 from ..utils.hash_utils import hash_file
 from .objects import ObjectStore
 from .index import Index
+import shutil
+
 
 class Repository:
     def __init__(self, path: str = "."):
@@ -247,3 +249,89 @@ class Repository:
                     print(f"{Fore.CYAN}{line}{Style.RESET_ALL}")
                 else:
                     print(line)
+
+    def restore(self, commit_hash: str = None, paths: List[str] = None) -> None:
+        """Restore files from a specific commit.
+
+        Args:
+            commit_hash (str, optional): Commit hash to restore from. Defaults to HEAD.
+            paths (List[str], optional): Specific paths to restore. Defaults to all files.
+
+        Raises:
+            ValueError: If commit not found or paths are invalid
+        """
+        if not self._initialized:
+            logger.error("Repository not initialized")
+            raise ValueError("Repository not initialized")
+
+        # Use HEAD if no commit specified
+        if commit_hash is None:
+            commit_hash = self.get_head()
+            if not commit_hash:
+                logger.error("No commits to restore from")
+                raise ValueError("No commits to restore from")
+
+        try:
+            # Get commit data
+            commit_data = self.object_store.get_commit(commit_hash)
+            if not commit_data:
+                logger.error(f"Commit {commit_hash} not found")
+                raise ValueError(f"Commit {commit_hash} not found")
+
+            files_to_restore = commit_data.get("files", {})
+
+            # If specific paths are provided, filter files to restore
+            if paths:
+                filtered_files = {}
+                for path in paths:
+                    resolved_path = str(Path(path).resolve().relative_to(self.path))
+                    if resolved_path in files_to_restore:
+                        filtered_files[resolved_path] = files_to_restore[resolved_path]
+                    else:
+                        logger.warning(f"File {path} not found in commit {commit_hash}")
+                files_to_restore = filtered_files
+
+            if not files_to_restore:
+                logger.warning("No files to restore")
+                return
+
+            # Create backup of current state (optional)
+            self._backup_working_directory(files_to_restore.keys())
+
+            # Restore files
+            restore_commit = {"files": files_to_restore}
+            self.object_store.restore_files(restore_commit, self.path)
+
+            logger.info(
+                f"Restored {len(files_to_restore)} files from commit {commit_hash[:8]}"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to restore: {str(e)}")
+            raise
+
+    def _backup_working_directory(self, paths: Iterable[str]) -> None:
+        """Create backup of files that will be overwritten.
+
+        Args:
+            paths (Iterable[str]): Paths to backup
+        """
+        backup_dir = self.vcs_dir / "backup"
+        try:
+            for path in paths:
+                file_path = self.path / path
+                if file_path.exists():
+                    relative_backup_path = backup_dir / path
+                    ensure_dir(relative_backup_path.parent)
+                    shutil.copy2(file_path, relative_backup_path)
+                    logger.debug(f"Created backup of {path}")
+        except Exception as e:
+            logger.error(f"Failed to create backup: {str(e)})")
+            raise
+
+    def clean_backups(self) -> None:
+        """Remove backup directory."""
+        backup_dir = self.vcs_dir / "backup"
+        if backup_dir.exists():
+            shutil.rmtree(backup_dir)
+            logger.debug("Removed backup directory")
