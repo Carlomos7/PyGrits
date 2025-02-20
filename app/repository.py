@@ -60,6 +60,29 @@ class Repository:
         hash_value = hasher.hexdigest()
 
         return hash_value
+    def _update_index(self, file_path: Path, hash_value: str) -> None:
+        # Read the contents of the index file and do a json parse on it
+        # Then add the new file to the index and write it back to the index file
+        # Get relative path from repository root for storage
+        rel_path = str(file_path.relative_to(self.path))
+
+        try:
+            with open(self.index_file, "r") as f:  # Read the index file
+                index = json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            # If index is corrupted or missing, create new
+            index = {"version": 1, "entries": {}}
+
+        # Update file entry
+        index["entries"][rel_path] = {  # Add the file to the index
+            "hash": hash_value,
+            "timestamp": datetime.now().isoformat(),
+            "size": file_path.stat().st_size,
+        }
+
+        # Write the updated index back to the index file
+        with open(self.index_file, "w") as f:
+            json.dump(index, f, indent=2)
 
     def add(self, file_path: str) -> None:
         if not self._initialized:
@@ -84,6 +107,10 @@ class Repository:
         # Write the file contents to the objects directory
         object_path = self.objects_dir / file_hash
         object_path.write_text(file_contents, encoding="utf-8")
+
+        self._update_index(file_path, file_hash)
+        print(f"File to be added: {file_path}")
+
 
 if __name__ == "__main__":
     # Simmple command line interface to init and add a file to the repository
