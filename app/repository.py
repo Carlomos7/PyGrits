@@ -26,3 +26,10 @@ class Repository:
 
         # Internal state tracking
         self._initialized = self._check_initialized()
+
+    def _check_initialized(self) -> bool:
+        return (
+            self.vcs_dir.exists()
+            and self.objects_dir.exists()
+            and self.head_file.exists()
+        )
