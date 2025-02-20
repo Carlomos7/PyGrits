@@ -237,10 +237,35 @@ class Repository:
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise ValueError(f"Invalid commit object {commit_hash}")
 
+    def log(self, max_entries: int = None) -> None:
+        """Display commit history.
+
+        Args:
+            max_entries (int, optional): Maximum number of entries to display. Defaults to None.
+        """
+        current_commit = self.get_head()
+        count = 0
+
+        while current_commit and (max_entries is None or count < max_entries):
+            try:
+                commit_data = self.get_commit(current_commit)
+                print(f"Commit: {current_commit}")
+                print(f"Date: {commit_data['timestamp']}")
+                print(f"Message: {commit_data['message']}")
+                print("-" * 50)
+
+                current_commit = commit_data.get("parent", "")
+                count += 1
+
+            except ValueError:
+                print(f"Invalid commit {current_commit}")
+                break
+
 
 if __name__ == "__main__":
     # Simmple command line interface to init and add a file to the repository
     repo = Repository()
-    repo.init()
+    #repo.init()
     repo.add("sample.txt")
-    repo.create_commit("Initial commit")
+    repo.create_commit("Third commit")
+    repo.log()
