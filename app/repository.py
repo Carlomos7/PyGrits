@@ -145,6 +145,31 @@ class Repository:
         self._update_index(file_path, file_hash)
         print(f"File to be added: {file_path}")
 
+    def get_head(self) -> str:
+        """Get the current HEAD commit hash.
+
+        Returns:
+            str: HEAD commit hash
+        """
+        if not self._initialized:
+            raise ValueError("Repository not initialized")
+
+        try:
+            return self.head_file.read_text().strip()
+        except FileNotFoundError:
+            return ""
+
+    def set_head(self, commit_hash: str) -> None:
+        """
+        Set the current HEAD commit hash.
+
+        Args:
+            commit_hash (str): Commit hash to be set as HEAD
+        """
+        self.head_file.write_text(commit_hash)
+
+
+
 
 if __name__ == "__main__":
     # Simmple command line interface to init and add a file to the repository
