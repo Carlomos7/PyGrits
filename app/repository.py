@@ -53,3 +53,10 @@ class Repository:
         self._initialized = True
 
         print(f"Initialized empty repository in {self.path}")
+
+    def hash_object(self, data: bytes) -> str:
+        hasher = hashlib.sha1()
+        hasher.update(data.encode("utf-8"))
+        hash_value = hasher.hexdigest()
+
+        return hash_value
