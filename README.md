@@ -1,7 +1,3 @@
-Got it! Here’s the **cleaned-up** version of the README, following good practices by omitting `.py` extensions and keeping things concise yet informative.
-
----
-
 # PyGrits
 
 A lightweight version control system implemented in Python, designed for learning about the internals of version control systems like Git.
