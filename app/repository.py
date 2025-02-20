@@ -181,9 +181,66 @@ class Repository:
         except (json.JSONDecodeError, FileNotFoundError):
             return {}
 
+    def create_commit(self, message: str):
+        if not self._initialized:
+            raise ValueError("Repository not initialized")
+        # Get staged files
+        staged_files = self.get_staged_files()
+        if not staged_files:
+            raise ValueError("No files staged for commit")
+
+        # Create commit object
+        if not staged_files:
+            raise ValueError("No files staged for commit")
+
+        commit_data = {
+            "parent": self.get_head(),
+            "timestamp": datetime.now().isoformat(),
+            "message": message,
+            "files": staged_files,
+        }
+
+        # Convert commit data to string and hash it
+        commit_content = json.dumps(commit_data, indent=2, sort_keys=True)
+        commit_hash = self.hash_object(commit_content)
+
+        # Store commit object
+        commit_path = self.objects_dir / commit_hash
+        commit_path.write_text(commit_content, encoding="utf-8")
+
+        # Update HEAD to point to the new commit
+        self.set_head(commit_hash)
+
+        # Clear the staging area
+        with open(self.index_file, "w") as f:
+            json.dump({"version": 1, "entries": {}}, f, indent=2)
+
+        print(f"Commit created: {commit_hash}")
+        return commit_hash
+
+    def get_commit(self, commit_hash: str) -> Dict[str, Any]:
+        """Get the commit object for the provided commit hash.
+
+        Args:
+            commit_hash (str): Commit hash
+
+        Returns:
+            Dict[str, Any]: Commit object
+        """
+        commit_path = self.objects_dir / commit_hash
+
+        if not commit_path.exists():
+            raise ValueError(f"Commit {commit_hash} not found")
+        try:
+            commit_content = commit_path.read_text("utf-8")
+            return json.loads(commit_content)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise ValueError(f"Invalid commit object {commit_hash}")
+
 
 if __name__ == "__main__":
     # Simmple command line interface to init and add a file to the repository
     repo = Repository()
     repo.init()
     repo.add("sample.txt")
+    repo.create_commit("Initial commit")
