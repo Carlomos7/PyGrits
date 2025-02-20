@@ -7,11 +7,11 @@ from typing import List, Iterable
 import difflib
 from colorama import Fore, Style
 
-from ..utils.logger import logger
-from ..utils.file_utils import ensure_dir, get_relative_path
-from ..utils.hash_utils import hash_file
-from .objects import ObjectStore
-from .index import Index
+from app.utils.logger import logger
+from app.utils.file_utils import ensure_dir, get_relative_path
+from app.utils.hash_utils import hash_file
+from app.core.objects import ObjectStore
+from app.core.index import Index
 import shutil
 
 
